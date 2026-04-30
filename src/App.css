@@ -169,21 +169,6 @@ button:disabled {
   gap: 14px;
 }
 
-.study-toggle {
-  display: inline-flex;
-  width: fit-content;
-  align-items: center;
-  gap: 10px;
-  color: #36523d;
-  font-weight: 800;
-}
-
-.study-toggle input {
-  width: 22px;
-  height: 22px;
-  accent-color: #16a34a;
-}
-
 .answers {
   display: grid;
   gap: 12px;
@@ -248,7 +233,6 @@ button:disabled {
   color: #b91c1c;
 }
 
-.next-button,
 .primary {
   min-height: 54px;
   padding: 0 22px;

@@ -1,8 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import countries from './data/africaCountries.json'
 import { VIEWBOX_SIZE, countryToSvgPath } from './geo'
 import { getAccuracy, makeOptions, shuffle } from './quiz'
 import './App.css'
+
+const ADVANCE_DELAY = 650
 
 function makeDeck(source = countries) {
   return shuffle(source)
@@ -24,15 +26,15 @@ function StudyGuideCard({ country }) {
 }
 
 function App() {
+  const advanceTimerRef = useRef(null)
   const [deck, setDeck] = useState(() => makeDeck())
   const [questionIndex, setQuestionIndex] = useState(0)
   const [score, setScore] = useState(0)
   const [answered, setAnswered] = useState(0)
   const [selectedIso, setSelectedIso] = useState(null)
-  const [wrongAttempts, setWrongAttempts] = useState([])
   const [missedCountries, setMissedCountries] = useState([])
   const [isComplete, setIsComplete] = useState(false)
-  const [studyMode, setStudyMode] = useState(false)
+  const [isAdvancing, setIsAdvancing] = useState(false)
 
   const currentCountry = deck[questionIndex]
   const questionNumber = Math.min(questionIndex + 1, deck.length)
@@ -62,73 +64,45 @@ function App() {
     })
   }, [])
 
-  const completeQuestion = useCallback(
-    ({ wasCorrect, country }) => {
-      setSelectedIso(country.iso)
-      setAnswered((value) => value + 1)
-
-      if (wasCorrect && wrongAttempts.length === 0) {
-        setScore((value) => value + 1)
-      } else if (!wasCorrect || wrongAttempts.length > 0) {
-        rememberMiss(currentCountry)
-      }
-    },
-    [currentCountry, rememberMiss, wrongAttempts.length],
-  )
-
   const chooseAnswer = useCallback(
     (country) => {
-      if (!currentCountry || isAnswered) return
+      if (!country || !currentCountry || isAnswered || isAdvancing) return
 
       const wasCorrect = country.iso === currentCountry.iso
+      setSelectedIso(country.iso)
+      setAnswered((value) => value + 1)
+      setIsAdvancing(true)
 
       if (wasCorrect) {
-        completeQuestion({ wasCorrect, country })
-        return
-      }
-
-      const nextWrongAttempts = [...wrongAttempts, country.iso]
-      setWrongAttempts(nextWrongAttempts)
-
-      if (studyMode && nextWrongAttempts.length < 2) {
+        setScore((value) => value + 1)
+      } else {
         rememberMiss(currentCountry)
-        return
       }
 
-      completeQuestion({ wasCorrect, country })
+      advanceTimerRef.current = window.setTimeout(() => {
+        if (questionIndex + 1 >= deck.length) {
+          setIsComplete(true)
+          return
+        }
+
+        setQuestionIndex((value) => value + 1)
+        setSelectedIso(null)
+        setIsAdvancing(false)
+      }, ADVANCE_DELAY)
     },
-    [
-      completeQuestion,
-      currentCountry,
-      isAnswered,
-      rememberMiss,
-      studyMode,
-      wrongAttempts,
-    ],
+    [currentCountry, deck.length, isAnswered, isAdvancing, questionIndex, rememberMiss],
   )
 
-  const nextQuestion = useCallback(() => {
-    if (!isAnswered) return
-
-    if (questionIndex + 1 >= deck.length) {
-      setIsComplete(true)
-      return
-    }
-
-    setQuestionIndex((value) => value + 1)
-    setSelectedIso(null)
-    setWrongAttempts([])
-  }, [deck.length, isAnswered, questionIndex])
-
   const restartGame = useCallback((source = countries) => {
+    window.clearTimeout(advanceTimerRef.current)
     setDeck(makeDeck(source))
     setQuestionIndex(0)
     setScore(0)
     setAnswered(0)
     setSelectedIso(null)
-    setWrongAttempts([])
     setMissedCountries([])
     setIsComplete(false)
+    setIsAdvancing(false)
   }, [])
 
   const practiceMissed = useCallback(() => {
@@ -149,15 +123,17 @@ function App() {
 
         if (isComplete) {
           restartGame()
-        } else {
-          nextQuestion()
         }
       }
     }
 
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [chooseAnswer, isComplete, nextQuestion, options, restartGame])
+  }, [chooseAnswer, isComplete, options, restartGame])
+
+  useEffect(() => {
+    return () => window.clearTimeout(advanceTimerRef.current)
+  }, [])
 
   if (isComplete) {
     return (
@@ -259,21 +235,11 @@ function App() {
           </section>
 
           <section className="answer-area" aria-label="Answer choices">
-            <label className="study-toggle">
-              <input
-                type="checkbox"
-                checked={studyMode}
-                onChange={(event) => setStudyMode(event.target.checked)}
-              />
-              <span>Study Mode</span>
-            </label>
-
             <div className="answers">
               {options.map((country, index) => {
                 const isCorrectOption = country.iso === currentCountry.iso
-                const isWrongTry = wrongAttempts.includes(country.iso)
                 const revealCorrect = isAnswered && isCorrectOption
-                const showWrong = selectedIso === country.iso || isWrongTry
+                const showWrong = selectedIso === country.iso
                 const className = [
                   'answer-button',
                   revealCorrect ? 'correct' : '',
@@ -287,7 +253,7 @@ function App() {
                     type="button"
                     className={className}
                     key={country.iso}
-                    disabled={isAnswered || isWrongTry}
+                    disabled={isAnswered}
                     onClick={() => chooseAnswer(country)}
                   >
                     <span>{index + 1}</span>
@@ -298,30 +264,16 @@ function App() {
             </div>
 
             <div className="feedback" aria-live="polite">
-              {!isAnswered && wrongAttempts.length === 0 && (
-                <p>Choose an answer or press 1-4.</p>
-              )}
-              {!isAnswered && wrongAttempts.length > 0 && (
-                <p>Try again. Study Mode reveals the answer after two misses.</p>
-              )}
+              {!isAnswered && <p>Press 1-4 or click an answer.</p>}
               {isAnswered && selectedIso === currentCountry.iso && (
-                <p className="success">Correct.</p>
+                <p className="success">Correct. Next country coming up.</p>
               )}
               {isAnswered && selectedIso !== currentCountry.iso && (
                 <p className="error">
-                  The answer is {currentCountry.name}.
+                  The answer is {currentCountry.name}. Next country coming up.
                 </p>
               )}
             </div>
-
-            <button
-              type="button"
-              className="next-button"
-              disabled={!isAnswered}
-              onClick={nextQuestion}
-            >
-              {questionIndex + 1 >= deck.length ? 'See Results' : 'Next'}
-            </button>
           </section>
         </div>
       </section>
