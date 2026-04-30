@@ -8,6 +8,21 @@ function makeDeck(source = countries) {
   return shuffle(source)
 }
 
+function StudyGuideCard({ country }) {
+  return (
+    <article className="study-card">
+      <svg
+        viewBox={`0 0 ${VIEWBOX_SIZE} ${VIEWBOX_SIZE}`}
+        role="img"
+        aria-label={`${country.name} outline`}
+      >
+        <path d={countryToSvgPath(country.geometry)} fillRule="evenodd" />
+      </svg>
+      <strong>{country.name}</strong>
+    </article>
+  )
+}
+
 function App() {
   const [deck, setDeck] = useState(() => makeDeck())
   const [questionIndex, setQuestionIndex] = useState(0)
@@ -157,16 +172,19 @@ function App() {
             <span>{accuracy}% accuracy</span>
           </div>
 
-          <div className="missed-list">
-            <h2>Countries to review</h2>
+          <div className="study-guide">
+            <h2>Study guide</h2>
             {missedCountries.length === 0 ? (
               <p>Perfect round. Every outline landed.</p>
             ) : (
-              <ul>
-                {missedCountries.map((country) => (
-                  <li key={country.iso}>{country.name}</li>
-                ))}
-              </ul>
+              <>
+                <p>Review these outlines, then practice just the missed set.</p>
+                <div className="study-grid" aria-label="Missed country study guide">
+                  {missedCountries.map((country) => (
+                    <StudyGuideCard country={country} key={country.iso} />
+                  ))}
+                </div>
+              </>
             )}
           </div>
 
